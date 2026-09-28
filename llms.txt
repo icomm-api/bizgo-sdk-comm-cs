@@ -1,0 +1,88 @@
+# bizgo-sdk-comm (C# / .NET)
+
+> .NET SDK for the Bizgo Communication API (Korea): SMS/LMS/MMS, international SMS, RCS, Kakao AlimTalk/BrandMessage, Naver TalkTalk, plus every other API of the spec (146 operations: reservations, Kakao senders, AlimTalk/BrandMessage/RCS templates, insights, counsel/상담톡). Current version 1.2.0. Install `dotnet add package Bizgo.Sdk.Comm --version 1.2.0` (tests: `Bizgo.Sdk.Comm.Testing`, same version), namespaces `Bizgo`, `Bizgo.Models` and `Bizgo.Testing`. Targets netstandard2.0 and net8.0. All I/O is async (`...Async(..., CancellationToken)`).
+
+## Rules for generated code
+
+- Read the API key from the environment: `new BizgoClient(new BizgoClientOptions())` uses `BIZGO_API_KEY`. Never hard-code keys, never put them in client-side code. The key is sent raw (no `Bearer`/`ApiKey` prefix); the SDK does this.
+- Use `BizgoEnvironment.Sandbox` for tests (no real delivery). Default is Production.
+- `BizgoClient` is thread-safe and `IDisposable`: create one per API key, reuse it (singleton in DI), dispose at shutdown. Do not create one per request.
+- Every channel is sent with `client.Send.OmniAsync(to, new IChannelMessage[] { ... }, options)`. Put fallback channels after the primary one: `{ new AlimtalkMessage { ... }, new SmsMessage { ... } }`.
+- Models use object initializers with PascalCase properties (`SenderKey`, `TemplateCode`, `From`, `Text`); JSON names are the API names. Only properties you set are sent.
+- LMS and MMS both use `MmsMessage`; MMS when `FileKey = new List<string> { ... }` is set (upload with `client.Files.UploadMmsAsync(FileUpload.FromPath(...))` first, max 3 keys, jpg <= 300KB).
+- SMS text <= 90 bytes, LMS/MMS <= 2000 bytes, counted in EUC-KR/CP949 (Hangul = 2 bytes). Emoji are rejected. Validation happens before sending and throws `BizgoValidationException` (field paths only, no values).
+- Max 200 recipients per request. For larger lists use `client.Send.BulkAsync(recipients, messages, new BulkSendOptions { IdempotencyKeyPrefix = "campaign-1" })` (chunks of 200, 4 concurrent, never loses accepted chunks; check `result.Errors` and `result.Failed`; recipients of chunks already accepted with the same key come back in `result.Duplicates`, not as errors).
+- Every other API is a generated method `client.<Resource>.<Sub>.<Method>Async(pathParams..., request?, requiredQuery..., options?, ct)`, for example `client.Alimtalk.Templates.ListAsync(senderKey, new AlimtalkTemplatesListOptions { Limit = 100 })`. List methods have `Enumerate...Async` (`IAsyncEnumerable<T>`). Results are never null (empty object/list). `BizgoOperation.All` lists every operation.
+- Custom networking: pass `HttpMessageHandler` (proxy, IHttpClientFactory `CreateHandler(name)`) with `AllowAutoRedirect = false`, `UseCookies = false` and no `Credentials`; there is no `HttpClient` option. Hooks/Log must be synchronous (async lambdas are rejected).
+- The client paces requests per process: send operations (`x-sdk-rate: send`) 200 recipients/s, others 5 requests/s (`RateLimit = null` turns it off). It does not coordinate several processes.
+- In unit tests use `Bizgo.Testing.FakeBizgoHandler` (`fake.CreateClient()`, `fake.On("sendOmni").Fail(...)`, `fake.Requests`) and `WebhookSigner.Sign(secret, json)`; never call the real API from tests.
+- Set `new SendOptions { IdempotencyKey = ... }` on sends that may be retried; without it, sends are not retried after timeouts or 5xx (to avoid duplicates). Bizgo requires `idempotencyTtl` with a key (A309 otherwise): leave `IdempotencyTtl` null and the SDK sends `BizgoClient.DefaultIdempotencyTtl` (86400 s); an explicit value (0-86400, 0 included) is kept; no key, no TTL. The same applies to `RequestAsync`, `BulkAsync` chunks and generated operations whose body has both fields; your request object is not modified.
+- A successful send only means *accepted*. Check `result.Failed` for rejected recipients (retrying with the same `IdempotencyKey` is safe: Bizgo answers HTTP 200 with per-recipient `A301`, and the SDK returns those already-accepted recipients in `result.Duplicates`, not in `Failed` or `Succeeded`; a request-level `A301` still throws `BizgoDuplicateRequestException`), and get final delivery results from reports (`client.Reports.ConsumeAsync(handler)` or webhooks).
+- AlimTalk full send (`SendType` unset) requires `MsgType = "AT"` (text) or `"AI"` (image) and `Text` (the approved template text); Bizgo rejects a missing msgType with A523, so the SDK throws `BizgoValidationException` first. Reuse the template's type: `(await client.Alimtalk.Templates.GetAsync(senderKey, templateCode)).MsgType`. Template send (`SendType = "template"`) needs no `MsgType`/`Text` but every destination needs `ReplaceWords`.
+- Conditionally required fields come from the spec's `x-sdk-required-if` and are checked before sending (AlimTalk/BrandMessage by `sendType`, BrandMessage button `WL` needs `UrlPc` + `UrlMobile`, `AL` needs `UrlMobile`, RCS `Header = "1"` needs `Footer`, counsel messages by `msgType`). Rules on `destinations[]` are checked when the whole request is validated (send), not on a channel model alone.
+- Substitution: text contains `#{name}`; values go in `new Destination("01000000000") { ReplaceWords = new Dictionary<string, string> { ["name"] = "..." } }`.
+- `SendOmniRequest.FromJson(json)` rejects unknown fields; use the documented API field names.
+
+## Quick reference
+
+```csharp
+using Bizgo;
+using Bizgo.Models;
+
+using var client = new BizgoClient(new BizgoClientOptions { Environment = BizgoEnvironment.Sandbox });
+
+await client.Send.SmsAsync("01000000000", from: "01000000000", text: "...");                 // -> SendResult
+await client.Send.LmsAsync(to, from, text, title: null, options: null);
+await client.Send.MmsAsync(to, from, text, fileKeys: new[] { "..." }, title: null);
+await client.Send.OmniAsync(to, messages, new SendOptions { Ref, GroupKey, PaymentCode, IdempotencyKey, IdempotencyTtl });
+await client.Send.RequestAsync(SendOmniRequest.FromJson(json));                             // raw body
+// to: string, string[], List<string>, Destination, Destination[], List<Destination>, or Recipients.Of(IEnumerable<...>)
+// SendResult: Destinations, Succeeded, Failed, Duplicates (A301), MsgKeys, Ref, TrackingId
+
+await client.Files.UploadMmsAsync(FileUpload.FromPath("a.jpg"));        // -> .FileKey, .Expired
+await client.Files.UploadRcsAsync(FileUpload.FromBytes(bytes, "a.png"));  // -> .Media
+await client.Files.UploadBrandMessageAsync(FileUpload.FromStream(s, "a.jpg"), BrandImageKind.Wide); // Default|Wide|WideItemList|WideItemListFirst|CarouselFeed|CarouselCommerce -> .ImgUrl
+
+await client.Reports.PollAsync();          // -> ReportBatch { ReportId, Reports, IsEmpty }
+await client.Reports.AckAsync(reportId);
+await client.Reports.ConsumeAsync(async (reports, ct) => { /* upsert by MsgKey */ });  // -> int handled; acks only after success
+await client.Reports.InquiryAsync(msgKey); // -> IReadOnlyList<Report>
+
+await client.Messages.StatusAsync(msgKey) / StatusByRequestIdAsync(requestId);   // -> IReadOnlyList<MessageStatus>
+await client.Messages.StatisticsAsync(new DateTime(2026, 9, 1), new DateTime(2026, 9, 23), serviceType: "SMS");
+await client.Messages.HistoryAsync(requestTime, serviceTypes, groupKey, lastSeq, limit); // -> MessagePage
+await foreach (var m in client.Messages.EnumerateHistoryAsync(DateTimeOffset.UtcNow.AddHours(-1), new[] { "SMS" })) { }
+await client.Messages.MoAsync(msgKey); await client.Messages.MoHistoryAsync(occurredTime, from: null, to: null);
+await foreach (var mo in client.Messages.EnumerateMoHistoryAsync(occurredTime)) { }
+// times: DateTimeOffset / DateTime(Utc|Local) converted to KST; DateTime(Unspecified) taken as KST; strings sent as is. limit 1-1000.
+
+var receiver = new WebhookReceiver(Environment.GetEnvironmentVariable("BIZGO_WEBHOOK_SECRET")!);
+// the webhook secret is obtained by requesting it from Bizgo; report/mo verify X-IB-Signature = HMAC-SHA256(secret, X-IB-Timestamp), hex or base64
+var report = receiver.Report(name => request.Headers[name], rawBodyBytes); // throws BizgoWebhookVerificationException -> answer 401
+return Webhooks.AckJson(report.MsgKey!);   // {"msgKey": ...} within 5 seconds; dedupe by MsgKey
+
+var counsel = Webhooks.ParseCounselMessage(rawBodyBytes); // counsel (상담톡) webhooks carry no signature: no secret needed (ParseCounsel*; receiver.Counsel* ignores headers)
+return Webhooks.CounselAckJson();          // ack {"code":"A000","result":"Success"}; parse errors throw BizgoWebhookVerificationException -> answer 400
+
+await client.Send.BulkAsync(recipients, messages, new BulkSendOptions { ChunkSize = 200, Concurrency = 4, IdempotencyKeyPrefix = "c1" }); // -> BulkSendResult
+await client.Reservations.CreateAsync(new ReservationCreateRequest { ... });           // -> .ResvKey, .Data.Destinations
+await foreach (var t in client.Alimtalk.Templates.EnumerateAsync(senderKey)) { }
+await client.Kakao.Senders.GetAsync(senderKey);                                        // -> KakaoSenderProfile
+new BizgoClientOptions { Hooks = new BizgoHooks { OnResponse = e => { /* e.Operation.Name, e.PathTemplate, e.StatusCode, e.Code, e.Duration */ } } };
+// OpenTelemetry (net8.0): tracerProvider.AddSource("Bizgo")
+```
+
+## Errors
+
+`BizgoException` > `BizgoConfigurationException`, `BizgoValidationException` (`Errors`: Path, Reason), `BizgoConnectionException` (> `BizgoTimeoutException`), `BizgoApiException` (> `BizgoBadRequestException`, `BizgoAuthenticationException`, `BizgoPermissionDeniedException`, `BizgoNotFoundException`, `BizgoDuplicateRequestException`, `BizgoRateLimitException` (`RetryAfter`), `BizgoInternalServerException`), `BizgoInvalidResponseException`, `BizgoWebhookVerificationException`.
+`BizgoApiException` has `HttpStatus`, `Code`, `Layer` (`Gateway` = common.authCode, `Service` = data.code; the same code differs by layer), `Description` (Korean), `TrackingId`, `ServerMessage`, `Body`.
+`BizgoAuthenticationException` usually means a wrong key or an unregistered caller IP.
+`BizgoDuplicateRequestException.AlreadyAccepted` is true when the SDK had retried (an earlier attempt was accepted). `BizgoInvalidResponseException` has `HttpStatus`, `TrackingId`, `Body`; for sends the request may have been accepted. `e.ToJson()` / `BizgoApiException.FromJson(json)` move errors between processes.
+
+## Links
+
+- [README](https://github.com/icomm-api/bizgo-sdk-comm-cs/blob/main/README.md)
+- [Examples](https://github.com/icomm-api/bizgo-sdk-comm-cs/tree/main/examples)
+- [OpenAPI spec](https://github.com/icomm-api/bizgo-api-spec/blob/main/dist/openapi.yaml)
+- [Bizgo API reference](https://developers.bizgo.io/api-sdk/api-reference)
+- [Error codes](https://developers.bizgo.io/api-sdk/api-reference/error-codes)

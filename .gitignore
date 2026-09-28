@@ -1,0 +1,35 @@
+# build output
+bin/
+obj/
+artifacts/
+nupkg/
+*.nupkg
+*.snupkg
+TestResults/
+*.trx
+coverage*/
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# local toolchains / caches
+.dotnet/
+.nuget/
+
+# secrets: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.snk
+secrets/
+appsettings.*.local.json

@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0: .NET Framework 4.6.1+ / older .NET Core; net8.0: current LTS runtimes with no package dependencies. -->
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <AssemblyName>Bizgo.Sdk.Comm</AssemblyName>
+    <RootNamespace>Bizgo</RootNamespace>
+    <Version>1.2.0</Version>
+
+    <PackageId>Bizgo.Sdk.Comm</PackageId>
+    <Title>Bizgo Communication API SDK</Title>
+    <Description>.NET SDK for the Bizgo Communication API: SMS/LMS/MMS, international SMS, RCS, Kakao AlimTalk/BrandMessage and Naver TalkTalk, delivery reports, message history and webhook verification. Replaces Infobank.Omni.Sdk.Cs.</Description>
+    <PackageTags>bizgo;infobank;sms;lms;mms;rcs;kakao;alimtalk;brandmessage;navertalk;messaging</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/icomm-api/bizgo-sdk-comm-cs</PackageProjectUrl>
+    <PackageReleaseNotes>https://github.com/icomm-api/bizgo-sdk-comm-cs/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <IsPackable>true</IsPackable>
+
+    <!-- SourceLink (built into the .NET 8+ SDK), deterministic, symbol package -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
+
+    <IsTrimmable Condition="'$(TargetFramework)' == 'net8.0'">true</IsTrimmable>
+    <IsAotCompatible Condition="'$(TargetFramework)' == 'net8.0'">true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!-- netstandard2.0 needs these; net8.0 has them in the BCL. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <!-- JSON serialization (+ source generator) -->
+    <PackageReference Include="System.Text.Json" />
+    <!-- code page 949 (CP949/EUC-KR) for byte-length validation -->
+    <PackageReference Include="System.Text.Encoding.CodePages" />
+    <!-- IAsyncEnumerable<T> for page iteration -->
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <InternalsVisibleTo Include="Bizgo.Sdk.Comm.Tests" />
+  </ItemGroup>
+
+</Project>

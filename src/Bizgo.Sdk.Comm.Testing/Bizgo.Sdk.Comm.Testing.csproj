@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Test helpers for applications that use Bizgo.Sdk.Comm (SDK-DESIGN §11.3). No dependencies beyond the SDK itself. -->
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <AssemblyName>Bizgo.Sdk.Comm.Testing</AssemblyName>
+    <RootNamespace>Bizgo.Testing</RootNamespace>
+    <Version>1.2.0</Version>
+
+    <PackageId>Bizgo.Sdk.Comm.Testing</PackageId>
+    <Title>Bizgo Communication API SDK - test helpers</Title>
+    <Description>Offline test helpers for Bizgo.Sdk.Comm: a fake HttpMessageHandler with request recording, default success responses per operation, error injection and signed webhook requests. For tests only.</Description>
+    <PackageTags>bizgo;infobank;testing;fake;mock</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/icomm-api/bizgo-sdk-comm-cs</PackageProjectUrl>
+    <PackageReleaseNotes>https://github.com/icomm-api/bizgo-sdk-comm-cs/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <IsPackable>true</IsPackable>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
+    <IsTrimmable Condition="'$(TargetFramework)' == 'net8.0'">true</IsTrimmable>
+    <IsAotCompatible Condition="'$(TargetFramework)' == 'net8.0'">true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bizgo.Sdk.Comm\Bizgo.Sdk.Comm.csproj" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

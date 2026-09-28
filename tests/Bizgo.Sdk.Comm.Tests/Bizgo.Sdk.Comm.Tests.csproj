@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net8.0 (minimum LTS target) and net10.0 (latest LTS). On Windows also net48, which exercises the netstandard2.0 build. -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net8.0;net10.0;net48</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <RootNamespace>Bizgo.Tests</RootNamespace>
+    <!-- the target frameworks differ per OS (net48 only on Windows), so this project's lock file cannot be enforced everywhere -->
+    <RestoreLockedMode>false</RestoreLockedMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" PrivateAssets="all" />
+    <Reference Include="System.Net.Http" />
+    <!-- the examples and the generator target .NET 8+ -->
+    <Compile Remove="ExamplesTests.cs;GeneratedCodeTests.cs;OperationCoverageTests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Bizgo.Sdk.Comm\Bizgo.Sdk.Comm.csproj" />
+    <ProjectReference Include="..\..\src\Bizgo.Sdk.Comm.Testing\Bizgo.Sdk.Comm.Testing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+    <ProjectReference Include="..\..\examples\Bizgo.Examples\Bizgo.Examples.csproj" />
+    <!-- run the generator in-process to check that the committed models are current -->
+    <Compile Include="..\..\tools\Bizgo.Codegen\Generator.cs" Link="Codegen\Generator.cs" />
+    <Compile Include="..\..\tools\Bizgo.Codegen\GeneratorApi.cs" Link="Codegen\GeneratorApi.cs" />
+    <Compile Include="..\..\tools\Bizgo.Codegen\GeneratorRequiredIf.cs" Link="Codegen\GeneratorRequiredIf.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\tools\Bizgo.Codegen\YamlJson.cs" Link="Codegen\YamlJson.cs" />
+  </ItemGroup>
+
+</Project>

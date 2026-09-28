@@ -1,0 +1,65 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.{cs,csx}]
+indent_size = 4
+
+# ---- code style (enforced in build: EnforceCodeStyleInBuild) ----
+csharp_style_namespace_declarations = block_scoped:suggestion
+csharp_prefer_braces = true:warning
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+dotnet_diagnostic.IDE0005.severity = warning  # unnecessary using
+dotnet_diagnostic.IDE0011.severity = warning  # braces
+
+# ---- analyzers ----
+# The library targets netstandard2.0 too, where these newer APIs do not exist
+# (ArgumentNullException.ThrowIfNull, ObjectDisposedException.ThrowIf, span-based Concat, char overloads).
+dotnet_diagnostic.CA1510.severity = none
+dotnet_diagnostic.CA1513.severity = none
+dotnet_diagnostic.CA1845.severity = none
+dotnet_diagnostic.CA1865.severity = none
+dotnet_diagnostic.CA1866.severity = none
+dotnet_diagnostic.CA1847.severity = none
+# Library code must not capture the caller's synchronization context.
+dotnet_diagnostic.CA2007.severity = warning
+
+[tests/**.cs]
+# tests also compile for net48 (netstandard2.0 build), where span/generic Enum/token overloads are missing
+dotnet_diagnostic.CA2263.severity = none
+dotnet_diagnostic.CA1846.severity = none
+dotnet_diagnostic.CA2016.severity = none
+# xUnit test code: ConfigureAwait is not needed, names use underscores.
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1515.severity = none
+dotnet_diagnostic.CA2000.severity = none
+
+[examples/**.cs]
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.CA1303.severity = none
+dotnet_diagnostic.CA1515.severity = none
+
+[tools/**.cs]
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.CA1303.severity = none
+
+[*.{csproj,props,targets,xml,config}]
+indent_size = 2
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

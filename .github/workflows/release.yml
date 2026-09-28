@@ -1,0 +1,90 @@
+# v* 태그를 push하면 NuGet에 배포합니다. NuGet Trusted Publishing(OIDC)을 쓰므로 저장소에 NuGet API 키를 두지 않습니다.
+#
+# 사전 설정 (한 번):
+# 1. nuget.org > 계정 > Trusted Publishing에서 정책 추가:
+#    Repository owner = icomm-api, Repository = bizgo-sdk-comm-cs, Workflow file = release.yml, Environment = nuget
+#    (패키지 Bizgo.Sdk.Comm, Bizgo.Sdk.Comm.Testing의 소유자 계정/조직에서 만듭니다.)
+# 2. GitHub 저장소 Settings > Environments > "nuget" 생성: Required reviewers 지정, Deployment branches/tags를 v* 태그로 제한.
+# 3. GitHub 저장소 Settings > Variables > Actions에 NUGET_USER(정책을 만든 nuget.org 사용자 이름, 비밀 아님)를 추가.
+# 워크플로가 받는 NuGet 키는 OIDC 토큰으로 발급되는 단기 키이며 job이 끝나면 쓸 수 없습니다.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - run: dotnet restore  # locked mode via Directory.Build.props when GITHUB_ACTIONS=true
+      - name: 태그와 패키지 버전이 같은지
+        run: |
+          version=$(dotnet msbuild src/Bizgo.Sdk.Comm/Bizgo.Sdk.Comm.csproj -getProperty:Version)
+          test "v$version" = "$GITHUB_REF_NAME"
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet test --no-build -c Release
+      - run: dotnet run --project tools/Bizgo.Codegen -c Release -- --check
+      - name: 테스트 도구 패키지 버전도 같은지
+        run: |
+          version=$(dotnet msbuild src/Bizgo.Sdk.Comm.Testing/Bizgo.Sdk.Comm.Testing.csproj -getProperty:Version)
+          test "v$version" = "$GITHUB_REF_NAME"
+      - run: dotnet pack src/Bizgo.Sdk.Comm --no-build -c Release -o artifacts
+      - run: dotnet pack src/Bizgo.Sdk.Comm.Testing --no-build -c Release -o artifacts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nupkg
+          path: artifacts/
+
+  # net48 exercises the netstandard2.0 build; the test project adds it only on Windows
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - run: dotnet restore  # locked mode via Directory.Build.props when GITHUB_ACTIONS=true
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet test --no-build -c Release  # net8.0, net10.0 and net48
+
+  publish:
+    needs: [build, test-windows]
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nupkg
+          path: artifacts/
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+      - name: NuGet Trusted Publishing (OIDC → 단기 API 키)
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ vars.NUGET_USER }}
+      - name: Push (.nupkg + .snupkg)
+        run: dotnet nuget push "artifacts/*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate

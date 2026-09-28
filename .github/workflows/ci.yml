@@ -1,0 +1,89 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu: net8.0 + net10.0; windows adds net48 (exercises the netstandard2.0 build)
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - run: dotnet restore  # locked mode via Directory.Build.props when GITHUB_ACTIONS=true
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet test --no-build -c Release
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - run: dotnet restore  # locked mode via Directory.Build.props when GITHUB_ACTIONS=true
+      - name: 코드 형식
+        run: dotnet format --verify-no-changes --no-restore
+      - name: 생성 모델이 spec과 일치하는지
+        run: dotnet run --project tools/Bizgo.Codegen -c Release -- --check
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - run: dotnet restore  # locked mode via Directory.Build.props when GITHUB_ACTIONS=true
+      - name: 의존성 취약점 검사 (직접 + 전이)
+        run: |
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          if grep -q -i "has the following vulnerable packages" vulnerable.txt; then exit 1; fi
+      - name: 패키지 빌드
+        run: |
+          dotnet pack src/Bizgo.Sdk.Comm -c Release -o artifacts
+          dotnet pack src/Bizgo.Sdk.Comm.Testing -c Release -o artifacts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nupkg
+          path: artifacts/
+          retention-days: 7
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks (전체 히스토리)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.18.4@sha256:75bdb2b2f4db213cde0b8295f13a88d6b333091bbfbf3012a4e083d00d31caba \
+            detect --source /repo --config /repo/.gitleaks.toml --redact --verbose

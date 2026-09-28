@@ -1,0 +1,19 @@
+<Project>
+  <!-- Central package management: every version lives here. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- runtime (netstandard2.0 only) -->
+    <PackageVersion Include="System.Text.Json" Version="10.0.12" />
+    <PackageVersion Include="System.Text.Encoding.CodePages" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.12" />
+    <!-- tools / tests only -->
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />
+  </ItemGroup>
+</Project>

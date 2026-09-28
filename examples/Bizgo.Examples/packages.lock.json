@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "bizgo.sdk.comm": {
+        "type": "Project"
+      }
+    },
+    "net8.0": {
+      "bizgo.sdk.comm": {
+        "type": "Project"
+      }
+    }
+  }
+}
